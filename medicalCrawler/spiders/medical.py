@@ -4,15 +4,21 @@ import sys
 import logging
 import json
 import codecs
+import mysql.connector
+
 
 class MedicalSpider(scrapy.Spider):
     name = 'medicalCrawler'
     allowed_domains = ['db.yaozh.com']
     base_url = 'https://db.yaozh.com/policies/'
+    offset = 0
+    conn = mysql.connector.connect(host='localhost', user='root', password='root', database='medical')
+    sourceUrl = []
+
 
     #offset 为偏移量 每次加1
-    offset = 24473
-    start_urls = ['https://db.yaozh.com//policies/24473.html']
+    # offset = 24473
+    start_urls = ['https://db.yaozh.com//policies/11517.html']
 
     # 获取logger实例，如果参数为空则返回root logger
     logger = logging.getLogger("MedicalSpider")
@@ -37,6 +43,16 @@ class MedicalSpider(scrapy.Spider):
     failure_logger.addHandler(failure_handler)
     def __init__(self):
         self.file = codecs.open('medical.json', 'w', encoding='utf-8')
+        # cursor = self.conn.cursor()
+        # selectSQL = "select id,url,repeat_times from source_url where request_result = 0 and repeat_times < 5"
+        # cursor.execute(selectSQL)
+        # self.sourceUrl = cursor.fetchall()
+        # startUrl = self.sourceUrl[0][1].replace('\'', '')
+        # self.logger.info(startUrl)
+        # self.start_urls = [startUrl]
+        # cursor.close()
+
+
 
     def parse(self, response):
         medical = MedicalcrawlerItem()
@@ -94,12 +110,26 @@ class MedicalSpider(scrapy.Spider):
                     downloaderList.append(downloaderDic)
             medical['downloaderLinkList'] = downloaderList
             medical['ids'] = self.offset
+            # cursorSuccessful = self.conn.cursor()
+            # updateSuccessfulSQL = 'UPDATE source_url SET request_result = %s,repeat_times = %s where id = %s;'
+            # insertData = [1,self.sourceUrl[self.offset][2] + 1,self.sourceUrl[self.offset][0]]
+            # cursorSuccessful.execute(updateSuccessfulSQL,insertData)
+            # self.conn.commit()
+            # cursorSuccessful.close()
             yield medical
         else:
             thisUrl = self.base_url + str(self.offset) + '.html'
             self.failure_logger.info("failureUrl : " + thisUrl);
+            cursorFault = self.conn.cursor()
+            updateSuccessfulSQL = 'UPDATE source_url SET request_result = %s,repeat_times = %s where id = %s;'
+            insertData = [0, self.sourceUrl[self.offset][2] + 1, self.sourceUrl[self.offset][0]]
+            cursorFault.execute(updateSuccessfulSQL, insertData)
+            self.conn.commit()
+            cursorFault.close()
 
-        if(self.offset < 25400):
-            self.offset += 1
-            currentUrl = self.base_url + str(self.offset) + '.html'
-            yield scrapy.Request(currentUrl, callback=self.parse)
+        # if(self.offset < len(self.sourceUrl)):
+        #     self.offset += 1
+        #     currentUrl = self.sourceUrl[self.offset][1]
+        #     currentUrl = currentUrl.replace('\'', '')
+        #     self.logger.info('currentUrl : ' + currentUrl)
+        #     yield scrapy.Request(currentUrl, callback=self.parse)
